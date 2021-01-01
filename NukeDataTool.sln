@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30523.141
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NukeDataTool", "NukeDataTool\NukeDataTool.csproj", "{49371055-8163-45FC-8160-339214C9E5ED}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NukePackTool", "NukePackTool\NukePackTool.csproj", "{F3403F7F-A011-45D8-87F4-8D3BD9526CE1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NukeCheckTool", "NukeCheckTool\NukeCheckTool.csproj", "{D6C21C80-6113-4A3A-AA03-02448E4BA4AD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{49371055-8163-45FC-8160-339214C9E5ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{49371055-8163-45FC-8160-339214C9E5ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{49371055-8163-45FC-8160-339214C9E5ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{49371055-8163-45FC-8160-339214C9E5ED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F3403F7F-A011-45D8-87F4-8D3BD9526CE1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F3403F7F-A011-45D8-87F4-8D3BD9526CE1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F3403F7F-A011-45D8-87F4-8D3BD9526CE1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F3403F7F-A011-45D8-87F4-8D3BD9526CE1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6C21C80-6113-4A3A-AA03-02448E4BA4AD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6C21C80-6113-4A3A-AA03-02448E4BA4AD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6C21C80-6113-4A3A-AA03-02448E4BA4AD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6C21C80-6113-4A3A-AA03-02448E4BA4AD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {4473F08C-4908-4333-8584-BC69C8E40190}
+	EndGlobalSection
+EndGlobal
