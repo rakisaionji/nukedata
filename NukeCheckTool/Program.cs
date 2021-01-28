@@ -307,7 +307,217 @@ namespace NukeCheckTool
             }
         }
 
-        static void Execute(string filePath)
+        static bool RepairChecksum(FileStream fileStream)
+        {
+            Console.WriteLine("Repairing Checksum Table...");
+
+            // ========================================
+            //   Initialize Checksum Table
+            // ========================================
+
+            var segHeader = 8;
+            var segSize = 0x40000;
+            var bigBuffer = new byte[segSize];
+
+            var segCount = new FileInfo(fileStream.Name).Length / segSize;
+            var crcTable = new uint[segCount];
+
+            // ========================================
+            //   Repair Checksum Table (Data)
+            // ========================================
+
+            // Initialize variables
+            uint value;
+            int bytesRead;
+            var buffer = new byte[0x20];
+
+            // Set cursor to data portion
+            var blockSize = segSize;
+            fileStream.Seek(blockSize * segHeader, SeekOrigin.Begin);
+
+            // Check all data portion segments
+            for (int i = segHeader; i < segCount; i++)
+            {
+                Console.Write("\rReading segment #{0}.".PadRight(60), i);
+                bytesRead = fileStream.Read(bigBuffer, 0, blockSize);
+                if (bytesRead != blockSize)
+                {
+                    Console.WriteLine("\rError: ReadFile() read error at segment #{0}.", i);
+                    return false;
+                }
+                crcTable[i] = FastCrc32(0, bigBuffer, bytesRead);
+            }
+
+            // ========================================
+            //   Write Checksum Table (Data)
+            // ========================================
+
+            // Seek to checksum table portion to write
+            fileStream.Seek(0x2A00, SeekOrigin.Begin);
+
+            for (int i = 0; i < segCount; i++)
+            {
+                value = crcTable[i];
+                buffer[0] = (byte)value;
+                buffer[1] = (byte)(value >> 8);
+                buffer[2] = (byte)(value >> 16);
+                buffer[3] = (byte)(value >> 24);
+                fileStream.Write(buffer, 0, 4);
+            }
+
+            fileStream.Flush();
+
+            // ========================================
+            //   Read Boot Sector
+            // ========================================
+
+            // Seek to beginning of the file
+            blockSize = 0x2800;
+            fileStream.Seek(0, SeekOrigin.Begin);
+
+            // Read and calculate boot sector crc
+            bytesRead = fileStream.Read(bigBuffer, 0, blockSize);
+            if (bytesRead != blockSize)
+            {
+                Console.WriteLine("Error: ReadFile() read boot sector error.");
+                return false;
+            }
+
+            // Initialize first sector crc value
+            crcTable[0] = FastCrc32(0, bigBuffer, bytesRead);
+
+            // ========================================
+            //   Repair Checksum Table (Header)
+            // ========================================
+
+            // Skip to segment #1 and calculate crc
+            blockSize = segSize;
+            fileStream.Seek(segSize, SeekOrigin.Begin);
+
+            // Read and calculate crc segment #1 to #7
+            for (int i = 1; i < 8; i++)
+            {
+                Console.Write("\rReading segment #{0}.".PadRight(60), i);
+                bytesRead = fileStream.Read(bigBuffer, 0, blockSize);
+                if (bytesRead != blockSize)
+                {
+                    Console.WriteLine("\rError: ReadFile() read error at segment #{0}.", i);
+                    return false;
+                }
+                crcTable[i] = FastCrc32(0, bigBuffer, bytesRead);
+            }
+
+            // ========================================
+            //   Write Checksum Table (Header)
+            // ========================================
+
+            // Update checksum table in file
+            fileStream.Seek(0x2A00, SeekOrigin.Begin);
+            for (int i = 0; i < 8; i++)
+            {
+                value = crcTable[i];
+                buffer[0] = (byte)value;
+                buffer[1] = (byte)(value >> 8);
+                buffer[2] = (byte)(value >> 16);
+                buffer[3] = (byte)(value >> 24);
+                fileStream.Write(buffer, 0, 4);
+            }
+
+            // Reflect changes to file
+            fileStream.Flush();
+
+            // ========================================
+            //   Finalize Checksum Table (Header)
+            // ========================================
+
+            // Skip to checksum table and read
+            fileStream.Seek(0x2A04, SeekOrigin.Begin);
+
+            // Read the rest of segment #0 data
+            Console.Write("\rReading segment #0.".PadRight(60));
+            blockSize = Convert.ToInt32(segSize - fileStream.Position);
+
+            // Calculate and update crc segment #0
+            bytesRead = fileStream.Read(bigBuffer, 0, blockSize);
+            if (bytesRead != blockSize)
+            {
+                Console.WriteLine("\rError: ReadFile() read error at segment #0.");
+                return false;
+            }
+            crcTable[0] = FastCrc32(crcTable[0], bigBuffer, bytesRead);
+
+            // Update checksum in file
+            fileStream.Seek(0x2A00, SeekOrigin.Begin);
+            value = crcTable[0];
+            buffer[0] = (byte)value;
+            buffer[1] = (byte)(value >> 8);
+            buffer[2] = (byte)(value >> 16);
+            buffer[3] = (byte)(value >> 24);
+            fileStream.Write(buffer, 0, 4);
+
+            // Reflect changes to file
+            fileStream.Flush();
+
+            // Checksum Table is repaired
+            Console.WriteLine("\rChecksum Table is repaired successfully.".PadRight(60));
+            return true;
+        }
+
+        static bool RepairSignature(FileStream fileStream)
+        {
+            Console.WriteLine("Repairing Signature...");
+
+            // ========================================
+            //   Read and Repair Signature
+            // ========================================
+
+            // Calculate and write signature
+            fileStream.Seek(0x2A00, SeekOrigin.Begin);
+            using (var hmac = new HMACSHA1(Secret.HmacSecret))
+            {
+                // Initialize Buffer
+                var blockSize = 0x1000;
+                var buffer = new byte[blockSize];
+
+                // Calculate Signature
+                int bytesRead;
+                var bytesLeft = 0x200000 - 0x2A00;
+
+                while (true)
+                {
+                    if (bytesLeft < 0x1000) blockSize = bytesLeft;
+                    bytesRead = fileStream.Read(buffer, 0, blockSize);
+                    if (bytesRead != blockSize)
+                    {
+                        Console.WriteLine("Error: ReadFile() read data size error.");
+                        return false;
+                    }
+                    if (bytesLeft - bytesRead == 0)
+                    {
+                        hmac.TransformFinalBlock(buffer, 0, bytesRead);
+                        break;
+                    }
+                    else
+                    {
+                        hmac.TransformBlock(buffer, 0, bytesRead, buffer, 0);
+                        bytesLeft -= bytesRead;
+                    }
+                }
+
+                // Write down to file
+                var calcSign = hmac.Hash;
+                fileStream.Seek(0x2800, SeekOrigin.Begin);
+                fileStream.Write(calcSign, 0, calcSign.Length);
+            }
+
+            // Reflect changes to file
+            fileStream.Flush();
+
+            Console.WriteLine("\rSignature Data is repaired successfully.".PadRight(60));
+            return true;
+        }
+
+        static void Execute(string filePath, bool isRepair = false)
         {
             try
             {
@@ -318,12 +528,13 @@ namespace NukeCheckTool
                     Console.WriteLine("Error: File not found");
                     return;
                 }
-                using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                var fileAccess = (isRepair) ? FileAccess.ReadWrite : FileAccess.Read;
+                using (var fileStream = new FileStream(filePath, FileMode.Open, fileAccess, FileShare.Read))
                 {
-                    if (!CheckBootId(fileStream) ||
-                        !VerifyChecksum(fileStream) ||
-                        !VerifySignature(fileStream))
-                        return;
+                    var result = false;
+                    if (isRepair) result = (!CheckBootId(fileStream) || !RepairChecksum(fileStream) || !RepairSignature(fileStream));
+                    else result = (!CheckBootId(fileStream) || !VerifyChecksum(fileStream) || !VerifySignature(fileStream));
+                    return;
                 }
             }
             catch (Exception ex)
@@ -337,13 +548,16 @@ namespace NukeCheckTool
         {
             if (args.Length < 1)
             {
-                Console.WriteLine("Usage: {0} file1 [file2] ...", System.AppDomain.CurrentDomain.FriendlyName);
+                Console.WriteLine("Usage: {0} [--repair] file1 [file2] ...", System.AppDomain.CurrentDomain.FriendlyName);
             }
             else
             {
-                foreach (var file in args)
+                var isRepair = false;
+                foreach (var arg in args)
                 {
-                    Execute(file);
+                    var file = arg.Trim();
+                    if (file.ToLower().Equals("--repair")) isRepair = true;
+                    else Execute(file, isRepair);
                 }
             }
         }

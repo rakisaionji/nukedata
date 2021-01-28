@@ -45,7 +45,6 @@ namespace NukeDataTool
 
         private static void ParseArgs(string[] args)
         {
-            var v = false;
             var argsLen = args.Length;
             for (int i = 0; i < argsLen; i++)
             {
