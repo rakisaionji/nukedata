@@ -274,11 +274,11 @@ namespace NukePackTool
             //   Verify Boot Sector
             // ========================================
 
-            using (var aes = new RijndaelManaged { Mode = CipherMode.CBC, Padding = PaddingMode.None })
-            using (var ict = aes.CreateDecryptor(Secret.MasterKey, Secret.MasterIV))
-            using (var cms = new CryptoStream(new MemoryStream(arrBuffer), ict, CryptoStreamMode.Read))
+            // using (var aes = new RijndaelManaged { Mode = CipherMode.CBC, Padding = PaddingMode.None })
+            // using (var ict = aes.CreateDecryptor(Secret.MasterKey, Secret.MasterIV))
+            // using (var cms = new CryptoStream(new MemoryStream(arrBuffer), ict, CryptoStreamMode.Read))
             {
-                cms.Read(arrBuffer, 0, btidSize);
+                // cms.Read(arrBuffer, 0, btidSize);
 
                 var arrBootCk = arrBuffer.Skip(4).ToArray();
                 var crcBootId = FastCrc32(0, arrBootCk, arrBootCk.Length);
@@ -372,7 +372,7 @@ namespace NukePackTool
                 var headLength = mfs.Read(header, 0, btidSize);
                 if (headLength < btidSize)
                 {
-                    MsgBox("Invalid source file length.", 48);
+                    MsgBox("Invalid metadata length.", 48);
                     FscryptEncrypt_Stop(); return;
                 }
                 // Verify boot sector
@@ -398,7 +398,14 @@ namespace NukePackTool
             using (var ict = aes.CreateEncryptor(key, iv))
             {
                 // Write boot id
-                ofs.Write(header, 0, btidSize);
+                using (var oms = new MemoryStream())
+                using (var icf = aes.CreateEncryptor(Secret.MasterKey, Secret.MasterIV))
+                using (var cms = new CryptoStream(oms, icf, CryptoStreamMode.Write))
+                {
+                    cms.Write(header, 0, btidSize);
+                    header = oms.ToArray();
+                    ofs.Write(header, 0, btidSize);
+                }
 
                 // Write the rest of the data
                 long leftover = noiseTable.Length - btidSize;
@@ -622,7 +629,7 @@ namespace NukePackTool
             }
             if (String.IsNullOrEmpty(met))
             {
-                MsgBox("Please specify source file.", 48); return;
+                MsgBox("Please specify metadata file.", 48); return;
             }
             if (String.IsNullOrEmpty(dst))
             {
@@ -638,7 +645,7 @@ namespace NukePackTool
             }
             if (!File.Exists(met))
             {
-                MsgBox("Source file not exists.", 48); return;
+                MsgBox("Metadata file not exists.", 48); return;
             }
             if (dst.Equals(met, StringComparison.CurrentCultureIgnoreCase))
             {
@@ -665,9 +672,9 @@ namespace NukePackTool
             Array.Copy(kd, 16, iv, 0, 16);
 
             var fi = new FileInfo(met);
-            if (fi.Length < offset)
+            if (fi.Length < btidSize)
             {
-                MsgBox(String.Format("Source file must be {0} or more.", FormatFactory.FormatSize(offset)), 48);
+                MsgBox(String.Format("Metadata file must be {0} or more.", FormatFactory.FormatSize(btidSize)), 48);
                 FscryptEncrypt_Stop(); return;
             }
 
