@@ -148,7 +148,7 @@ namespace NukeCheckTool
 
             var segSize = 0x40000;
             var blockSize = 0x2800;
-            var bigBuffer = new byte[segSize];
+            var bigBuffer = new byte[segSize * 8];
 
             fileStream.Seek(0, SeekOrigin.Begin);
             var bytesRead = fileStream.Read(bigBuffer, 0, blockSize);
@@ -179,10 +179,6 @@ namespace NukeCheckTool
                 return false;
             }
 
-            // Update first sector crc value
-            var cCrcArray = bigBuffer.Skip(4).ToArray();
-            crcValue = FastCrc32(crcValue, cCrcArray, bytesRead - 4);
-
             // Populate the checksum table
             var crcTable = new uint[segCount];
             using (var br = new BinaryReader(new MemoryStream(bigBuffer)))
@@ -193,17 +189,35 @@ namespace NukeCheckTool
                 }
             }
 
-            // Reading the remaining data
-            blockSize = segSize - Convert.ToInt32(fileStream.Position);
-            bytesRead = fileStream.Read(bigBuffer, 0, blockSize);
-            if (bytesRead != blockSize)
+            // Check if cursor is drifted away from the first sector
+            if (fileStream.Position > segSize)
             {
-                Console.WriteLine("Error: ReadFile() read error at segment #0.");
-                return false;
-            }
+                // Update first sector crc value
+                var dataSize = 0x3D5FC; // = SEGMENT_SIZE - DICTIONARY_OFFSET - 4
+                var cCrcArray = bigBuffer.Skip(4).ToArray();
+                crcValue = FastCrc32(crcValue, cCrcArray, dataSize);
 
-            // Update first sector crc value
-            crcValue = FastCrc32(crcValue, bigBuffer, bytesRead);
+                // Move cursor back to the second sector
+                fileStream.Seek(segSize, SeekOrigin.Begin);
+            }
+            else // If not, read all the remaining data to move next
+            {
+                // Update first sector crc value
+                var cCrcArray = bigBuffer.Skip(4).ToArray();
+                crcValue = FastCrc32(crcValue, cCrcArray, bytesRead - 4);
+
+                // Read the remaining data to buffer
+                blockSize = segSize - Convert.ToInt32(fileStream.Position);
+                bytesRead = fileStream.Read(bigBuffer, 0, blockSize);
+                if (bytesRead != blockSize)
+                {
+                    Console.WriteLine("Error: ReadFile() read error at segment #0.");
+                    return false;
+                }
+
+                // Update first sector crc value
+                crcValue = FastCrc32(crcValue, bigBuffer, bytesRead);
+            }
 
             // ========================================
             //   Verify Checksum Table
@@ -317,7 +331,7 @@ namespace NukeCheckTool
 
             var segHeader = 8;
             var segSize = 0x40000;
-            var bigBuffer = new byte[segSize];
+            var bigBuffer = new byte[segSize * 8];
 
             var segCount = new FileInfo(fileStream.Name).Length / segSize;
             var crcTable = new uint[segCount];
