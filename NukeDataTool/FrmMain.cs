@@ -11,7 +11,7 @@ namespace NukeDataTool
 {
     public partial class FrmMain : Form
     {
-        private readonly TaskbarManager taskbarManager;
+        private TaskbarManager taskbarManager = null;
         private readonly byte[] key = new byte[16];
         private readonly byte[] iv = new byte[16];
         private string src, dst, dsm;
@@ -21,7 +21,6 @@ namespace NukeDataTool
         {
             InitializeComponent();
             if (TaskbarManager.IsPlatformSupported) taskbarManager = TaskbarManager.Instance;
-            else taskbarManager = null;
         }
 
         internal DialogResult MsgBox(string text, int icon = 0)
@@ -342,6 +341,8 @@ namespace NukeDataTool
 
         internal void btnDecrypt_Click(object sender, EventArgs e)
         {
+            if (Program.IsNoGui) taskbarManager = null;
+
             if (btnDecrypt.Text.Contains("Cancel"))
             {
                 CancelTask();
