@@ -14,7 +14,7 @@ namespace NukeDataTool
         private TaskbarManager taskbarManager = null;
         private readonly byte[] key = new byte[16];
         private readonly byte[] iv = new byte[16];
-        private string src, dst, dsm;
+        private string src, dst, dsm, dsk;
         private Thread thread;
 
         public FrmMain()
@@ -59,8 +59,7 @@ namespace NukeDataTool
                 }
                 else
                 {
-                    if (Program.IsAuto) this.Close();
-                    if (Program.IsSilent) return DialogResult.OK;
+                    if (Program.IsAuto || Program.IsSilent) return DialogResult.OK;
                     return MessageBox.Show(owner, text, this.Text, MessageBoxButtons.OK, (MessageBoxIcon)icon);
                 }
             }
@@ -335,6 +334,7 @@ namespace NukeDataTool
             if (lblStatus.Text.Equals("Success"))
             {
                 MsgBox("Data decrypt success.", 64);
+                if (Program.IsAuto) this.Close();
                 lblStatus.Text = "Ready";
             }
         }
@@ -353,10 +353,6 @@ namespace NukeDataTool
             src = txtSrc.Text.Trim();
             dst = txtDst.Text.Trim();
 
-            if (String.IsNullOrEmpty(kf))
-            {
-                MsgBox("Please specify key file.", 48); return;
-            }
             if (String.IsNullOrEmpty(src))
             {
                 MsgBox("Please specify input file.", 48); return;
@@ -365,7 +361,19 @@ namespace NukeDataTool
             {
                 MsgBox("Please specify output file.", 48); return;
             }
-            if (!File.Exists(kf))
+            if (String.IsNullOrEmpty(kf))
+            {
+                if (!src.EndsWith(".opt", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    MsgBox("Please specify key file.", 48); return;
+                }
+                var msg = MsgBox("Key file is not set. Continue?", 32);
+                if (msg == DialogResult.No)
+                {
+                    return;
+                }
+            }
+            else if (!File.Exists(kf))
             {
                 MsgBox("Key file not exists.", 48); return;
             }
@@ -380,7 +388,7 @@ namespace NukeDataTool
 
             if (File.Exists(dst) || File.Exists(dsm))
             {
-                var msg = MsgBox("Output file exists. Overwrite?", 32);
+                var msg = MsgBox("Output data file exists. Overwrite?", 32);
                 if (msg == DialogResult.No)
                 {
                     if (Program.IsAuto) this.Close();
@@ -388,24 +396,100 @@ namespace NukeDataTool
                 }
             }
 
-            this.Cursor = Cursors.WaitCursor;
-            tblParams.Enabled = false;
-            SetProgressText("Reading key file...");
-            barProgress.Value = 1;
-            btnDecrypt.Text = "&Cancel";
-
-            var kd = File.ReadAllBytes(kf);
-            if (kd.Length != 32)
+            if (String.IsNullOrEmpty(kf))
             {
-                MsgBox("Keyfile must be 32 bytes.", 48);
-                FscryptDecrypt_Stop(); return;
+                dsk = String.Format("{0}\\{1}.bin", dsd, dsf);
+                if (File.Exists(dsk))
+                {
+                    var msg = MsgBox("Output key file exists. Overwrite?", 32);
+                    if (msg == DialogResult.No)
+                    {
+                        if (Program.IsAuto) this.Close();
+                        return;
+                    }
+                }
+                SetProgressText("Generating keyfile...");
+                MakeKeyfile();
             }
-            Array.Copy(kd, 0, key, 0, 16);
-            Array.Copy(kd, 16, iv, 0, 16);
+            else
+            {
+                this.Cursor = Cursors.WaitCursor;
+                tblParams.Enabled = false;
+                SetProgressText("Reading key file...");
+                barProgress.Value = 1;
+                btnDecrypt.Text = "&Cancel";
+
+                var kd = File.ReadAllBytes(kf);
+                if (kd.Length != 32)
+                {
+                    MsgBox("Keyfile must be 32 bytes.", 48);
+                    FscryptDecrypt_Stop(); return;
+                }
+                Array.Copy(kd, 0, key, 0, 16);
+                Array.Copy(kd, 16, iv, 0, 16);
+            }
 
             SetProgressText("Start decrypt task...");
             thread = new Thread(FscryptDecrypt);
             thread.Start();
+        }
+
+        private void MakeKeyfile()
+        {
+            int offset = 0x200000;
+
+            var file = new FileInfo(src);
+            if (!file.Exists)
+            {
+                MsgBox("Input file not exists.", 48);
+                FscryptDecrypt_Stop(); return;
+            }
+
+            var allLength = file.Length;
+            if (allLength < offset)
+            {
+                MsgBox("Invalid file length.", 48);
+                FscryptDecrypt_Stop(); return;
+            }
+
+            if (File.Exists(dsk)) File.Delete(dsk);
+
+            int blockSize = 0x1000;
+            var data = new byte[blockSize];
+            var ikey = Secret.OptionKey;
+
+            using (var ifs = new FileStream(src, FileMode.Open, FileAccess.Read))
+            using (var ofs = new FileStream(dsk, FileMode.Create, FileAccess.Write))
+            using (var aes = new RijndaelManaged { Mode = CipherMode.CBC, Padding = PaddingMode.None })
+            using (var ict = aes.CreateDecryptor(ikey, new byte[16]))
+            {
+                ifs.Seek(offset + blockSize, SeekOrigin.Begin);
+                var location = ifs.Position - offset;
+                var bytesRead = ifs.Read(data, 0, blockSize);
+
+                if (bytesRead != blockSize)
+                {
+                    MsgBox("Error: ReadFile() read second block error.", 48);
+                    FscryptDecrypt_Stop(); return;
+                }
+
+                using (var cms = new CryptoStream(new MemoryStream(data), ict, CryptoStreamMode.Read))
+                {
+                    cms.Read(data, 0, blockSize);
+
+                    var value1 = BitConverter.ToInt64(data, 0) ^ location;
+                    var value2 = BitConverter.ToInt64(data, 8) ^ location;
+
+                    Array.Copy(BitConverter.GetBytes(value1), 0, data, 0, 8);
+                    Array.Copy(BitConverter.GetBytes(value2), 0, data, 8, 8);
+
+                    ofs.Write(ikey, 0, 16);
+                    ofs.Write(data, 0, 16);
+                }
+            }
+
+            Array.Copy(ikey, 0, key, 0, 16);
+            Array.Copy(data, 0, iv, 0, 16);
         }
 
         private void FrmMain_FormClosing(object sender, FormClosingEventArgs e)

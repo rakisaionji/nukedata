@@ -64,7 +64,17 @@ namespace NukeDataTool
                         if ((i + 1) < argsLen)
                         {
                             var file = args[i + 1];
-                            if (File.Exists(file)) frmMain.txtSrc.Text = file;
+                            if (File.Exists(file))
+                            {
+                                frmMain.txtSrc.Text = file;
+                                var of = frmMain.txtDst.Text;
+                                if (String.IsNullOrEmpty(of) || !of.Equals(file))
+                                {
+                                    var dsf = Path.GetFileNameWithoutExtension(file);
+                                    var dsd = Path.GetDirectoryName(file);
+                                    frmMain.txtDst.Text = String.Format("{0}\\{1}.img", dsd, dsf);
+                                }
+                            }
                         }
                         break;
                     case "-o": // Output
