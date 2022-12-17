@@ -408,7 +408,11 @@ namespace NukeDataTool
                         return;
                     }
                 }
+                this.Cursor = Cursors.WaitCursor;
+                tblParams.Enabled = false;
                 SetProgressText("Generating keyfile...");
+                barProgress.Value = 1;
+                btnDecrypt.Text = "&Cancel";
                 MakeKeyfile();
             }
             else
